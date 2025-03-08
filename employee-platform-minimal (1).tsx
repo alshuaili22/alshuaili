@@ -1,277 +1,271 @@
 import React, { useState, useEffect } from 'react';
 import Papa from 'papaparse';
 
-// Simplified version without complex styling
-const EmployeeProfilePlatform = () => {
-  const [employeeData, setEmployeeData] = useState([]);
+function EmployeeProfile() {
+  const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedEmployee, setSelectedEmployee] = useState(null);
-  const [filteredEmployees, setFilteredEmployees] = useState([]);
+  const [search, setSearch] = useState('');
+  const [employee, setEmployee] = useState(null);
+  const [filtered, setFiltered] = useState([]);
 
-  // Brand colors
-  const colors = {
-    orange: "#FA8200",
-    midnightBlue: "#0A1E3C",
-    turquoise: "#00AFB9"
-  };
+  // OQ brand colors
+  const orange = "#FA8200";
+  const blue = "#0A1E3C";
+  const teal = "#00AFB9";
 
+  // Load CSV data
   useEffect(() => {
-    const fetchData = async () => {
+    async function loadData() {
       try {
-        const response = await window.fs.readFile('Employee profile 2025.csv');
-        const text = new TextDecoder('cp1252').decode(response);
+        const file = await window.fs.readFile('Employee profile 2025.csv');
+        const text = new TextDecoder('cp1252').decode(file);
         
         Papa.parse(text, {
           header: true,
           dynamicTyping: true,
           skipEmptyLines: true,
           complete: (results) => {
-            setEmployeeData(results.data);
+            setData(results.data);
             setLoading(false);
           }
         });
       } catch (error) {
-        console.error('Error reading file:', error);
+        console.error('Error loading data:', error);
         setLoading(false);
       }
-    };
-
-    fetchData();
+    }
+    
+    loadData();
   }, []);
 
+  // Filter employees based on search
   useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setFilteredEmployees([]);
+    if (!search.trim()) {
+      setFiltered([]);
       return;
     }
-
-    const searchLower = searchTerm.toLowerCase();
-    const filtered = employeeData.filter(emp => {
-      const nameMatch = emp['Employee(s)'] && 
-                       String(emp['Employee(s)']).toLowerCase().includes(searchLower);
-      const idMatch = emp['Personnel no.'] && 
-                     String(emp['Personnel no.']).includes(searchTerm);
-      
-      return nameMatch || idMatch;
-    }).slice(0, 5);
     
-    setFilteredEmployees(filtered);
-  }, [searchTerm, employeeData]);
-
-  const handleEmployeeSelect = (employee) => {
-    setSelectedEmployee(employee);
-    setSearchTerm(employee['Employee(s)']);
-    setFilteredEmployees([]);
-  };
-
-  const analyzePerformanceTrend = (employee) => {
-    if (!employee) return { trend: 'Unknown', consistent: false, latestRating: 0 };
+    const term = search.toLowerCase();
+    const results = data
+      .filter(emp => {
+        const name = emp['Employee(s)'] ? String(emp['Employee(s)']).toLowerCase() : '';
+        const id = emp['Personnel no.'] ? String(emp['Personnel no.']) : '';
+        return name.includes(term) || id.includes(term);
+      })
+      .slice(0, 5);
     
-    const perf2021 = employee['2021 perfromance '];
-    const perf2022 = employee['2022 perfromance '];
-    const perf2023 = employee['2023 perfromance '];
+    setFiltered(results);
+  }, [search, data]);
+
+  // Select an employee
+  function selectEmployee(emp) {
+    setEmployee(emp);
+    setSearch(emp['Employee(s)']);
+    setFiltered([]);
+  }
+
+  // Analyze performance trend
+  function getPerformanceTrend() {
+    if (!employee) return { trend: 'Unknown', consistent: false };
     
-    const perfRatings = {
+    const ratings = {
       'Exceptional': 5,
       'Exceed Target': 4,
       'Achieved Target': 3,
       'Need Improvement': 2,
-      'Low Performance': 1,
-      'Unrated': 0,
-      '#N/A': 0
+      'Low Performance': 1
     };
     
-    const ratings = [
-      perf2021 ? (perfRatings[perf2021] || 0) : null,
-      perf2022 ? (perfRatings[perf2022] || 0) : null,
-      perf2023 ? (perfRatings[perf2023] || 0) : null
-    ].filter(r => r !== null);
-    
-    let trend = "Stable";
-    let direction = 0;
-    
-    if (ratings.length >= 2) {
-      const lastIdx = ratings.length - 1;
-      if (ratings[lastIdx] > ratings[lastIdx - 1]) {
-        trend = "Improving";
-        direction = 1;
-      } else if (ratings[lastIdx] < ratings[lastIdx - 1]) {
-        trend = "Declining";
-        direction = -1;
-      }
+    const perf = [];
+    if (employee['2021 perfromance '] && ratings[employee['2021 perfromance ']]) {
+      perf.push(ratings[employee['2021 perfromance ']]);
+    }
+    if (employee['2022 perfromance '] && ratings[employee['2022 perfromance ']]) {
+      perf.push(ratings[employee['2022 perfromance ']]);
+    }
+    if (employee['2023 perfromance '] && ratings[employee['2023 perfromance ']]) {
+      perf.push(ratings[employee['2023 perfromance ']]);
     }
     
-    let consistent = true;
-    if (ratings.length >= 3) {
-      if (direction === 1) {
-        consistent = ratings[1] >= ratings[0] && ratings[2] >= ratings[1];
-      } else if (direction === -1) {
-        consistent = ratings[1] <= ratings[0] && ratings[2] <= ratings[1];
-      } else {
-        consistent = ratings[0] === ratings[1] && ratings[1] === ratings[2];
-      }
+    if (perf.length < 2) return { trend: 'Insufficient Data', consistent: false };
+    
+    let trend = 'Stable';
+    const last = perf.length - 1;
+    
+    if (perf[last] > perf[last-1]) {
+      trend = 'Improving';
+    } else if (perf[last] < perf[last-1]) {
+      trend = 'Declining';
     }
     
-    return {
-      trend,
-      consistent,
-      hasData: ratings.length > 0,
-      ratings,
-      latestRating: ratings.length > 0 ? ratings[ratings.length - 1] : 0
-    };
-  };
+    const consistent = perf.length < 3 || 
+      (trend === 'Improving' && perf[1] >= perf[0] && perf[2] >= perf[1]) ||
+      (trend === 'Declining' && perf[1] <= perf[0] && perf[2] <= perf[1]) ||
+      (trend === 'Stable' && perf[0] === perf[1] && perf[1] === perf[2]);
+    
+    return { trend, consistent };
+  }
 
-  const getEmployeePotential = (employee) => {
-    if (!employee) return { category: 'Unknown', description: 'Insufficient data' };
+  // Get potential status based on 9-box
+  function getPotential() {
+    if (!employee || !employee['9 box matrix']) return { status: 'Not Assessed', color: 'gray' };
     
     const nineBox = employee['9 box matrix'];
-    const performanceTrend = analyzePerformanceTrend(employee);
-    const isSuccessor = employee['Successor'] && employee['Successor'].toUpperCase() === 'YES';
+    const highPotential = ['Hi-Potential', 'Hi-Lead', 'Hi-Professional', 'High-Grow'];
+    const lowPotential = ['Safe Hand', 'Dilemma', 'Casting Error', 'Shortfall'];
     
-    const highPotentialBoxes = ['Hi-Potential', 'Hi-Lead', 'Hi-Professional', 'High-Grow'];
-    const mediumPotentialBoxes = ['Promising', 'Safe Hand'];
-    const lowPotentialBoxes = ['Dilemma', 'Shortfall', 'Casting Error'];
-    
-    let category = 'Needs Assessment';
-    let description = '';
-    
-    if (highPotentialBoxes.includes(nineBox) && performanceTrend.latestRating >= 4) {
-      category = 'High Potential';
-      description = `Exceptional performer consistently exceeding targets${isSuccessor ? ' and identified as a successor' : ''}. Recommended for leadership development programs and increased responsibilities.`;
-    } else if (highPotentialBoxes.includes(nineBox) && performanceTrend.latestRating === 3) {
-      category = 'Emerging Talent';
-      description = 'Demonstrates high potential with solid performance. Focus on challenging assignments to accelerate growth.';
-    } else if (mediumPotentialBoxes.includes(nineBox) && performanceTrend.trend === 'Improving') {
-      category = 'Growing Talent';
-      description = 'Shows consistent improvement and solid potential. Provide targeted development opportunities.';
-    } else if (mediumPotentialBoxes.includes(nineBox) && performanceTrend.latestRating >= 3) {
-      category = 'Solid Performer';
-      description = 'Reliable performer with moderate potential. Focus on maintaining strengths while developing in key areas.';
-    } else if (lowPotentialBoxes.includes(nineBox) || performanceTrend.latestRating <= 2) {
-      category = 'Needs Development';
-      description = 'Requires focused intervention and performance improvement plan. Consider skills assessment and targeted coaching.';
-    } else if (nineBox === 'Unrated' || nineBox === '#N/A') {
-      category = 'Needs Assessment';
-      description = 'Insufficient data for accurate assessment. Recommend completing 9-box evaluation.';
+    if (highPotential.includes(nineBox)) {
+      return { status: 'Potential', color: teal };
+    } else if (nineBox === 'Promising') {
+      return { status: 'Promising', color: orange };
+    } else if (lowPotential.includes(nineBox)) {
+      return { status: 'Not Potential', color: '#ef4444' };
+    } else {
+      return { status: 'Not Assessed', color: 'gray' };
     }
-    
-    return { category, description };
-  };
+  }
 
-  const getDevelopmentRecommendations = (employee) => {
+  // Get color for 9-box ranking
+  function get9BoxColor() {
+    if (!employee || !employee['9 box matrix']) return 'gray';
+    
+    const nineBox = employee['9 box matrix'];
+    const highPotential = ['Hi-Potential', 'Hi-Lead', 'Hi-Professional', 'High-Grow'];
+    const lowPotential = ['Safe Hand', 'Dilemma', 'Casting Error', 'Shortfall'];
+    
+    if (highPotential.includes(nineBox)) {
+      return teal;
+    } else if (nineBox === 'Promising') {
+      return orange;
+    } else if (lowPotential.includes(nineBox)) {
+      return '#ef4444';
+    } else {
+      return 'gray';
+    }
+  }
+
+  // Get color for skill level
+  function getSkillColor() {
+    if (!employee || !employee['skill level']) return 'gray';
+    
+    const skill = employee['skill level'];
+    
+    if (skill === 'Expert' || skill === 'Advanced') {
+      return teal;
+    } else if (skill === 'Intermediate') {
+      return orange;
+    } else if (skill === 'Basic' || skill === 'Beginner') {
+      return '#ef4444';
+    } else {
+      return 'gray';
+    }
+  }
+
+  // Get recommendations
+  function getRecommendations() {
     if (!employee) return [];
     
-    const potential = getEmployeePotential(employee);
-    const recommendations = [];
+    const recs = [];
+    const skill = employee['skill level'];
+    const nineBox = employee['9 box matrix'];
     
-    if (potential.category === 'High Potential') {
-      recommendations.push('Leadership development program');
-      recommendations.push('Executive mentoring');
-      recommendations.push('Strategic project assignments');
-    } else if (potential.category === 'Emerging Talent') {
-      recommendations.push('Advanced skill development');
-      recommendations.push('Increased project responsibility');
-      recommendations.push('Mentoring program participation');
-    } else if (potential.category === 'Growing Talent') {
-      recommendations.push('Targeted skill development');
-      recommendations.push('Stretch assignments');
-      recommendations.push('Regular feedback sessions');
-    } else if (potential.category === 'Solid Performer') {
-      recommendations.push('Maintain current performance');
-      recommendations.push('Knowledge sharing opportunities');
-      recommendations.push('Process improvement projects');
-    } else if (potential.category === 'Needs Development') {
-      recommendations.push('Performance improvement plan');
-      recommendations.push('Regular coaching sessions');
-      recommendations.push('Core skill training');
-    } else {
-      recommendations.push('Complete 9-box evaluation');
-      recommendations.push('Performance review');
-      recommendations.push('Career aspiration discussion');
+    // Add skill-based recommendations
+    if (skill === 'Expert') {
+      recs.push('Lead knowledge transfer initiatives');
+      recs.push('Represent organization in industry forums');
+      recs.push('Mentor high-potential employees');
+    } else if (skill === 'Advanced') {
+      recs.push('Deepen specialized expertise');
+      recs.push('Take on mentoring responsibilities');
+      recs.push('Lead technical projects');
+    } else if (skill === 'Intermediate') {
+      recs.push('Pursue advanced certifications');
+      recs.push('Take on increasingly complex assignments');
+      recs.push('Begin developing mentoring capabilities');
+    } else if (skill === 'Basic' || skill === 'Beginner') {
+      recs.push('Intensive technical skills development');
+      recs.push('Structured learning path with regular checkpoints');
+      recs.push('Regular coaching sessions');
     }
     
-    return recommendations.slice(0, 3);
-  };
+    // Add 9-box based recommendation
+    const highPotential = ['Hi-Potential', 'Hi-Lead', 'Hi-Professional', 'High-Grow'];
+    if (highPotential.includes(nineBox)) {
+      recs.push('Leadership development program');
+    } else if (nineBox === 'Promising') {
+      recs.push('Project leadership experience');
+    } else if (nineBox === 'Safe Hand' || nineBox === 'Dilemma' || 
+               nineBox === 'Casting Error' || nineBox === 'Shortfall') {
+      recs.push('Performance improvement plan');
+    }
+    
+    return recs.slice(0, 4);
+  }
 
   if (loading) {
-    return (
-      <div className="p-8 text-center">
-        <div>Loading employee data...</div>
-      </div>
-    );
+    return <div className="p-4 text-center">Loading employee data...</div>;
   }
 
   return (
-    <div>
+    <div style={{ backgroundColor: '#f5f7fa', minHeight: '100vh' }}>
       {/* Header */}
-      <div style={{ backgroundColor: colors.midnightBlue, padding: "1rem", color: "white" }}>
-        <div className="container mx-auto">
-          <div style={{ display: "flex", alignItems: "center" }}>
-            {/* Simple OQ text logo instead of SVG */}
-            <div style={{ 
-              color: colors.orange, 
-              fontWeight: "bold", 
-              fontSize: "1.5rem",
-              marginRight: "1rem" 
-            }}>
-              OQ
-            </div>
-            <h1 style={{ fontWeight: "bold", fontSize: "1.25rem" }}>
-              Employee Profile Platform
-            </h1>
-          </div>
+      <div style={{ backgroundColor: blue, padding: '16px', color: 'white' }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', alignItems: 'center' }}>
+          <div style={{ color: orange, fontWeight: 'bold', fontSize: '24px', marginRight: '16px' }}>OQ</div>
+          <h1 style={{ fontSize: '20px', fontWeight: 'bold' }}>Employee Profile Platform</h1>
         </div>
       </div>
       
       {/* Main Content */}
-      <div className="container mx-auto p-4">
-        {/* Search */}
-        <div className="mb-6">
+      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '16px' }}>
+        {/* Search Box */}
+        <div style={{ marginBottom: '24px', position: 'relative' }}>
           <div style={{ 
-            border: `2px solid ${colors.orange}`,
-            padding: "0.5rem",
-            backgroundColor: "white",
-            borderRadius: "0.25rem"
+            border: `2px solid ${orange}`,
+            borderRadius: '4px',
+            backgroundColor: 'white',
+            padding: '8px'
           }}>
             <input
               type="text"
               placeholder="Search by employee name or ID..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ 
-                width: "100%",
-                padding: "0.5rem",
-                border: "none",
-                outline: "none"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: 'none',
+                outline: 'none'
               }}
             />
           </div>
           
-          {filteredEmployees.length > 0 && (
+          {filtered.length > 0 && (
             <div style={{ 
-              border: `1px solid ${colors.orange}`,
-              borderRadius: "0.25rem",
-              backgroundColor: "white",
-              marginTop: "0.25rem",
-              maxHeight: "15rem",
-              overflow: "auto"
+              position: 'absolute',
+              width: '100%',
+              backgroundColor: 'white',
+              borderRadius: '4px',
+              marginTop: '4px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              maxHeight: '240px',
+              overflow: 'auto',
+              zIndex: 10,
+              border: `1px solid ${orange}`
             }}>
-              <ul>
-                {filteredEmployees.map((emp, index) => (
+              <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                {filtered.map((emp, index) => (
                   <li
                     key={index}
-                    style={{ 
-                      padding: "0.5rem 1rem",
-                      cursor: "pointer",
-                      borderBottom: "1px solid #eee"
+                    style={{
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #eee',
+                      cursor: 'pointer'
                     }}
-                    onClick={() => handleEmployeeSelect(emp)}
+                    onClick={() => selectEmployee(emp)}
                   >
-                    <span style={{ color: colors.midnightBlue, fontWeight: "500" }}>
-                      {emp['Employee(s)']}
-                    </span>
-                    <span style={{ color: "gray", marginLeft: "0.5rem", fontSize: "0.875rem" }}>
+                    <span style={{ color: blue, fontWeight: 500 }}>{emp['Employee(s)']}</span>
+                    <span style={{ color: 'gray', marginLeft: '8px', fontSize: '14px' }}>
                       #{emp['Personnel no.']}
                     </span>
                   </li>
@@ -281,134 +275,163 @@ const EmployeeProfilePlatform = () => {
           )}
         </div>
         
-        {selectedEmployee ? (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1rem" }}>
-            {/* Employee Info */}
+        {employee ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
+            {/* Employee Basic Info */}
             <div style={{ 
-              backgroundColor: "white", 
-              borderRadius: "0.25rem",
-              padding: "1rem",
-              borderTop: `4px solid ${colors.orange}`
+              backgroundColor: 'white',
+              borderRadius: '4px',
+              padding: '16px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              borderTop: `4px solid ${orange}`
             }}>
-              <div style={{ marginBottom: "1rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <h2 style={{ fontSize: "1.25rem", fontWeight: "bold", color: colors.midnightBlue }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                marginBottom: '16px' 
+              }}>
+                <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: blue, margin: 0 }}>
                   Employee Profile
                 </h2>
                 <span style={{ 
-                  backgroundColor: selectedEmployee['Omani/Expat'] === 'Omani' ? `${colors.turquoise}20` : `${colors.orange}20`,
-                  color: selectedEmployee['Omani/Expat'] === 'Omani' ? colors.turquoise : colors.orange,
-                  padding: "0.25rem 0.75rem",
-                  borderRadius: "9999px",
-                  fontSize: "0.875rem"
+                  backgroundColor: `${getPotential().color}20`,
+                  color: getPotential().color,
+                  padding: '4px 12px',
+                  borderRadius: '999px',
+                  fontSize: '14px'
                 }}>
-                  {selectedEmployee['Omani/Expat']}
+                  {getPotential().status}
                 </span>
               </div>
               
-              <div style={{ marginBottom: "1.5rem" }}>
-                <h3 style={{ fontSize: "1.125rem", fontWeight: "600", color: colors.midnightBlue }}>
-                  {selectedEmployee['Employee(s)']}
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: '600', color: blue, margin: '0 0 4px 0' }}>
+                  {employee['Employee(s)']}
                 </h3>
-                <p style={{ color: "gray" }}>{selectedEmployee['Positions']}</p>
+                <p style={{ color: 'gray', margin: 0 }}>{employee['Positions']}</p>
               </div>
               
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid #eee" }}>
-                  <span style={{ color: "gray" }}>Personnel ID:</span>
-                  <span style={{ fontWeight: "500", color: colors.midnightBlue }}>{selectedEmployee['Personnel no.']}</span>
+              <div style={{ display: 'grid', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #eee' }}>
+                  <span style={{ color: 'gray' }}>Personnel ID:</span>
+                  <span style={{ fontWeight: '500', color: blue }}>{employee['Personnel no.']}</span>
                 </div>
                 
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid #eee" }}>
-                  <span style={{ color: "gray" }}>Department:</span>
-                  <span style={{ fontWeight: "500", color: colors.midnightBlue }}>{selectedEmployee['Department ']}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #eee' }}>
+                  <span style={{ color: 'gray' }}>Function:</span>
+                  <span style={{ fontWeight: '500', color: blue }}>{employee['Function']}</span>
                 </div>
                 
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid #eee" }}>
-                  <span style={{ color: "gray" }}>Grade:</span>
-                  <span style={{ fontWeight: "500", color: colors.midnightBlue }}>{selectedEmployee['Grade']}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #eee' }}>
+                  <span style={{ color: 'gray' }}>Department:</span>
+                  <span style={{ fontWeight: '500', color: blue }}>{employee['Department ']}</span>
                 </div>
                 
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid #eee" }}>
-                  <span style={{ color: "gray" }}>Entry Date:</span>
-                  <span style={{ fontWeight: "500", color: colors.midnightBlue }}>{selectedEmployee['Entry Date']}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #eee' }}>
+                  <span style={{ color: 'gray' }}>Team:</span>
+                  <span style={{ fontWeight: '500', color: blue }}>{employee['Team']}</span>
                 </div>
                 
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0" }}>
-                  <span style={{ color: "gray" }}>Years of Service:</span>
-                  <span style={{ fontWeight: "500", color: colors.midnightBlue }}>
-                    {selectedEmployee['Years of experience']} years
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #eee' }}>
+                  <span style={{ color: 'gray' }}>Grade:</span>
+                  <span style={{ fontWeight: '500', color: blue }}>{employee['Grade']}</span>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #eee' }}>
+                  <span style={{ color: 'gray' }}>Years of Service:</span>
+                  <span style={{ fontWeight: '500', color: blue }}>
+                    {employee['Years of experience']} years
                   </span>
                 </div>
               </div>
             </div>
             
-            {/* Performance */}
+            {/* Performance Analysis */}
             <div style={{ 
-              backgroundColor: "white", 
-              borderRadius: "0.25rem",
-              padding: "1rem",
-              borderTop: `4px solid ${colors.turquoise}`
+              backgroundColor: 'white',
+              borderRadius: '4px',
+              padding: '16px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              borderTop: `4px solid ${teal}`
             }}>
-              <h2 style={{ fontSize: "1.25rem", fontWeight: "bold", color: colors.midnightBlue, marginBottom: "1rem" }}>
+              <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: blue, margin: '0 0 16px 0' }}>
                 Performance Analysis
               </h2>
               
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1rem", marginBottom: "1rem" }}>
-                <div style={{ backgroundColor: "#f8f9fa", padding: "0.75rem", borderRadius: "0.25rem" }}>
-                  <div style={{ fontSize: "0.875rem", color: "gray", marginBottom: "0.25rem" }}>2021 Performance</div>
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(3, 1fr)', 
+                gap: '16px', 
+                marginBottom: '16px' 
+              }}>
+                <div style={{ backgroundColor: '#f8f9fa', padding: '12px', borderRadius: '4px' }}>
+                  <div style={{ fontSize: '14px', color: 'gray', marginBottom: '4px' }}>2021 Performance</div>
                   <div style={{ 
-                    fontWeight: "600", 
-                    color: selectedEmployee['2021 perfromance '] === 'Exceptional' || selectedEmployee['2021 perfromance '] === 'Exceed Target' 
-                      ? colors.turquoise : colors.midnightBlue 
+                    fontWeight: '600',
+                    color: employee['2021 perfromance '] === 'Exceptional' || employee['2021 perfromance '] === 'Exceed Target' 
+                      ? teal 
+                      : blue 
                   }}>
-                    {selectedEmployee['2021 perfromance '] || 'Not Rated'}
+                    {employee['2021 perfromance '] || 'Not Rated'}
                   </div>
                 </div>
                 
-                <div style={{ backgroundColor: "#f8f9fa", padding: "0.75rem", borderRadius: "0.25rem" }}>
-                  <div style={{ fontSize: "0.875rem", color: "gray", marginBottom: "0.25rem" }}>2022 Performance</div>
+                <div style={{ backgroundColor: '#f8f9fa', padding: '12px', borderRadius: '4px' }}>
+                  <div style={{ fontSize: '14px', color: 'gray', marginBottom: '4px' }}>2022 Performance</div>
                   <div style={{ 
-                    fontWeight: "600", 
-                    color: selectedEmployee['2022 perfromance '] === 'Exceptional' || selectedEmployee['2022 perfromance '] === 'Exceed Target' 
-                      ? colors.turquoise : colors.midnightBlue 
+                    fontWeight: '600',
+                    color: employee['2022 perfromance '] === 'Exceptional' || employee['2022 perfromance '] === 'Exceed Target' 
+                      ? teal 
+                      : blue 
                   }}>
-                    {selectedEmployee['2022 perfromance '] || 'Not Rated'}
+                    {employee['2022 perfromance '] || 'Not Rated'}
                   </div>
                 </div>
                 
-                <div style={{ backgroundColor: "#f8f9fa", padding: "0.75rem", borderRadius: "0.25rem" }}>
-                  <div style={{ fontSize: "0.875rem", color: "gray", marginBottom: "0.25rem" }}>2023 Performance</div>
+                <div style={{ backgroundColor: '#f8f9fa', padding: '12px', borderRadius: '4px' }}>
+                  <div style={{ fontSize: '14px', color: 'gray', marginBottom: '4px' }}>2023 Performance</div>
                   <div style={{ 
-                    fontWeight: "600", 
-                    color: selectedEmployee['2023 perfromance '] === 'Exceptional' || selectedEmployee['2023 perfromance '] === 'Exceed Target' 
-                      ? colors.turquoise : colors.midnightBlue 
+                    fontWeight: '600',
+                    color: employee['2023 perfromance '] === 'Exceptional' || employee['2023 perfromance '] === 'Exceed Target' 
+                      ? teal 
+                      : blue 
                   }}>
-                    {selectedEmployee['2023 perfromance '] || 'Not Rated'}
+                    {employee['2023 perfromance '] || 'Not Rated'}
                   </div>
                 </div>
               </div>
               
-              <div style={{ backgroundColor: "#f8f9fa", padding: "0.75rem", borderRadius: "0.25rem", marginBottom: "1rem" }}>
-                <div style={{ fontWeight: "500", color: colors.midnightBlue }}>
-                  Performance Trend: {analyzePerformanceTrend(selectedEmployee).trend}
-                  {analyzePerformanceTrend(selectedEmployee).consistent ? ' (Consistent)' : ' (Variable)'}
+              <div style={{ backgroundColor: '#f8f9fa', padding: '12px', borderRadius: '4px', marginBottom: '16px' }}>
+                <div style={{ fontWeight: '500', color: blue }}>
+                  Performance Trend: {getPerformanceTrend().trend}
+                  {getPerformanceTrend().consistent ? ' (Consistent)' : ' (Variable)'}
                 </div>
               </div>
               
-              <div style={{ backgroundColor: "#f8f9fa", padding: "0.75rem", borderRadius: "0.25rem", marginBottom: "1rem" }}>
-                <div style={{ fontWeight: "500", color: colors.midnightBlue, marginBottom: "0.25rem" }}>9-Box Matrix Position:</div>
-                <div style={{ color: "gray" }}>
-                  {selectedEmployee['9 box matrix'] === '#N/A' || selectedEmployee['9 box matrix'] === 'Unrated' 
-                    ? 'Not yet rated' 
-                    : selectedEmployee['9 box matrix']}
+              <div style={{ backgroundColor: '#f8f9fa', padding: '12px', borderRadius: '4px', marginBottom: '16px' }}>
+                <div style={{ fontWeight: '500', color: blue, marginBottom: '4px' }}>9-Box Ranking:</div>
+                <div style={{ color: get9BoxColor() }}>
+                  {employee['9 box matrix'] || 'Not Ranked'}
                 </div>
               </div>
               
-              <div style={{ backgroundColor: "#f8f9fa", padding: "0.75rem", borderRadius: "0.25rem" }}>
-                <div style={{ fontWeight: "500", color: colors.midnightBlue, marginBottom: "0.25rem" }}>Succession Status:</div>
-                <div style={{ color: "gray" }}>
-                  {selectedEmployee['Successor'] && selectedEmployee['Successor'].toUpperCase() === 'YES' 
-                    ? `Identified as successor for position: ${selectedEmployee['succession position'] || 'Not specified'}` 
+              <div style={{ backgroundColor: '#f8f9fa', padding: '12px', borderRadius: '4px', marginBottom: '16px' }}>
+                <div style={{ fontWeight: '500', color: blue, marginBottom: '4px' }}>Skill Level:</div>
+                <div style={{ color: getSkillColor() }}>
+                  {employee['skill level'] || 'Not Assessed'}
+                </div>
+              </div>
+              
+              <div style={{ backgroundColor: '#f8f9fa', padding: '12px', borderRadius: '4px' }}>
+                <div style={{ fontWeight: '500', color: blue, marginBottom: '4px' }}>Succession Status:</div>
+                <div style={{ 
+                  color: employee['Successor'] && employee['Successor'].toUpperCase() === 'YES' 
+                    ? teal 
+                    : "gray" 
+                }}>
+                  {employee['Successor'] && employee['Successor'].toUpperCase() === 'YES' 
+                    ? `Identified as successor for position: ${employee['succession position'] || 'Not specified'}` 
                     : 'Not currently in succession plan'}
                 </div>
               </div>
@@ -416,107 +439,193 @@ const EmployeeProfilePlatform = () => {
             
             {/* AI Assessment */}
             <div style={{ 
-              backgroundColor: "white", 
-              borderRadius: "0.25rem",
-              padding: "1rem",
-              borderTop: `4px solid ${colors.orange}`
+              backgroundColor: 'white',
+              borderRadius: '4px',
+              padding: '16px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              borderTop: `4px solid ${orange}`
             }}>
-              <h2 style={{ fontSize: "1.25rem", fontWeight: "bold", color: colors.midnightBlue, marginBottom: "1rem" }}>
+              <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: blue, margin: '0 0 16px 0' }}>
                 AI Assessment & Recommendations
               </h2>
               
               <div style={{ 
-                padding: "0.75rem", 
-                borderRadius: "0.25rem", 
-                marginBottom: "1.5rem",
-                border: `1px solid ${
-                  getEmployeePotential(selectedEmployee).category === 'High Potential' ? `${colors.turquoise}30` : `${colors.orange}30`
-                }`,
-                backgroundColor: getEmployeePotential(selectedEmployee).category === 'High Potential' 
-                  ? `${colors.turquoise}10` : `${colors.orange}10`
+                backgroundColor: '#f8f9fa', 
+                padding: '16px', 
+                borderRadius: '4px', 
+                marginBottom: '24px',
+                border: `1px solid ${getPotential().status === 'Potential' ? `${teal}30` : `${orange}30`}`
               }}>
                 <h3 style={{ 
-                  fontWeight: "600", 
-                  marginBottom: "0.5rem",
-                  color: getEmployeePotential(selectedEmployee).category === 'High Potential' 
-                    ? colors.turquoise : colors.orange 
+                  fontSize: '18px', 
+                  fontWeight: '600', 
+                  marginTop: 0,
+                  marginBottom: '8px',
+                  color: getPotential().status === 'Potential' ? teal : orange
                 }}>
-                  {getEmployeePotential(selectedEmployee).category}
+                  {getPotential().status === 'Potential' ? 'High Potential' : 
+                   getPotential().status === 'Not Potential' ? 'Needs Development' : 
+                   getPotential().status === 'Promising' ? 'Growing Talent' : 'Needs Assessment'}
                 </h3>
-                <p style={{ color: "gray" }}>
-                  {getEmployeePotential(selectedEmployee).description}
+                <p style={{ color: 'gray', margin: 0 }}>
+                  {getPotential().status === 'Potential' ? 
+                    `Exceptional performer consistently exceeding targets${
+                      employee['Successor'] && employee['Successor'].toUpperCase() === 'YES' ? 
+                      ' and identified as a successor' : ''
+                    }. Recommended for leadership development programs and increased responsibilities.` : 
+                   getPotential().status === 'Not Potential' ? 
+                    'Requires focused intervention and performance improvement plan. Consider skills assessment and targeted coaching.' : 
+                   getPotential().status === 'Promising' ? 
+                    'Shows consistent improvement and solid potential. Provide targeted development opportunities.' : 
+                    'Insufficient data for accurate assessment. Recommend completing 9-box evaluation.'}
                 </p>
               </div>
               
-              <h3 style={{ fontWeight: "600", color: colors.midnightBlue, marginBottom: "0.5rem" }}>
-                Development Recommendations:
-              </h3>
-              
-              <div style={{ backgroundColor: "#f8f9fa", padding: "0.75rem", borderRadius: "0.25rem", marginBottom: "1.5rem" }}>
-                <ul style={{ listStyleType: "none", padding: 0, margin: 0 }}>
-                  {getDevelopmentRecommendations(selectedEmployee).map((rec, index) => (
-                    <li key={index} style={{ marginBottom: "0.5rem", display: "flex", alignItems: "center" }}>
-                      <span style={{ 
-                        width: "8px", 
-                        height: "8px", 
-                        borderRadius: "50%", 
-                        backgroundColor: colors.orange,
-                        display: "inline-block",
-                        marginRight: "0.5rem"
-                      }}></span>
-                      <span style={{ color: "gray" }}>{rec}</span>
-                    </li>
-                  ))}
-                </ul>
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', color: blue, margin: '0 0 8px 0' }}>
+                  Technical Skill Assessment:
+                </h3>
+                <div style={{ backgroundColor: '#f8f9fa', padding: '12px', borderRadius: '4px' }}>
+                  <p style={{ color: 'gray', margin: 0 }}>
+                    {employee['skill level'] === 'Expert' 
+                      ? 'Employee demonstrates exceptional mastery of technical skills with ability to tackle complex challenges. Can lead initiatives and mentor others.' 
+                      : employee['skill level'] === 'Advanced'
+                      ? 'Employee shows strong technical proficiency with deep domain knowledge. Capable of handling complex tasks independently.'
+                      : employee['skill level'] === 'Intermediate'
+                      ? 'Employee has good working knowledge and can complete standard tasks with minimal supervision. Ready for more complex assignments.'
+                      : employee['skill level'] === 'Basic' || employee['skill level'] === 'Beginner'
+                      ? 'Employee has foundational technical knowledge but requires structured development to build capabilities.'
+                      : 'Skill level not assessed.'}
+                  </p>
+                </div>
               </div>
               
-              <div style={{ borderTop: "1px solid #eee", paddingTop: "1rem" }}>
-                <h3 style={{ fontWeight: "600", color: colors.midnightBlue, marginBottom: "0.5rem" }}>
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', color: blue, margin: '0 0 8px 0' }}>
+                  Development Recommendations:
+                </h3>
+                <div style={{ backgroundColor: '#f8f9fa', padding: '12px', borderRadius: '4px' }}>
+                  <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                    {getRecommendations().map((rec, index) => (
+                      <li key={index} style={{ 
+                        marginBottom: index < getRecommendations().length - 1 ? '8px' : 0,
+                        display: 'flex',
+                        alignItems: 'flex-start'
+                      }}>
+                        <span style={{ 
+                          display: 'inline-block',
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          backgroundColor: orange,
+                          marginTop: '6px',
+                          marginRight: '8px'
+                        }}></span>
+                        <span style={{ color: 'gray' }}>{rec}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', color: blue, margin: '0 0 8px 0' }}>
                   Key Focus Areas:
                 </h3>
-                
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                  <div style={{ backgroundColor: "#f8f9fa", padding: "0.75rem", borderRadius: "0.25rem" }}>
-                    <h4 style={{ fontSize: "0.875rem", fontWeight: "500", marginBottom: "0.5rem", color: colors.turquoise }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div style={{ backgroundColor: '#f8f9fa', padding: '12px', borderRadius: '4px' }}>
+                    <h4 style={{ 
+                      fontSize: '14px', 
+                      fontWeight: '500', 
+                      margin: '0 0 4px 0', 
+                      color: teal 
+                    }}>
                       Strengths to Leverage:
                     </h4>
-                    <p style={{ color: "gray", fontSize: "0.875rem" }}>
-                      {getEmployeePotential(selectedEmployee).category === 'High Potential' 
+                    <p style={{ color: 'gray', margin: 0, fontSize: '14px' }}>
+                      {getPotential().status === 'Potential' 
                         ? 'Leadership capability and consistent high performance' 
-                        : 'Core technical competencies and reliability'}
+                        : getPotential().status === 'Promising'
+                          ? 'Improving performance trajectory and technical abilities'
+                          : getPotential().status === 'Not Potential'
+                            ? 'Core technical competencies and existing knowledge base'
+                            : 'Current skills and experiences that can be built upon'}
                     </p>
                   </div>
-                  
-                  <div style={{ backgroundColor: "#f8f9fa", padding: "0.75rem", borderRadius: "0.25rem" }}>
-                    <h4 style={{ fontSize: "0.875rem", fontWeight: "500", marginBottom: "0.5rem", color: colors.orange }}>
+                  <div style={{ backgroundColor: '#f8f9fa', padding: '12px', borderRadius: '4px' }}>
+                    <h4 style={{ 
+                      fontSize: '14px', 
+                      fontWeight: '500', 
+                      margin: '0 0 4px 0', 
+                      color: orange 
+                    }}>
                       Areas for Development:
                     </h4>
-                    <p style={{ color: "gray", fontSize: "0.875rem" }}>
-                      {getEmployeePotential(selectedEmployee).category === 'High Potential' 
+                    <p style={{ color: 'gray', margin: 0, fontSize: '14px' }}>
+                      {getPotential().status === 'Potential' 
                         ? 'Strategic thinking and broader organizational impact' 
-                        : 'Performance consistency and technical skill enhancement'}
+                        : getPotential().status === 'Promising'
+                          ? 'Consistency and specialized technical skills development'
+                          : getPotential().status === 'Not Potential'
+                            ? 'Performance metrics and core competency enhancement'
+                            : 'Comprehensive skills assessment and development planning'}
                     </p>
                   </div>
                 </div>
+              </div>
+              
+              {/* Action Buttons */}
+              <div style={{ 
+                display: 'flex',
+                justifyContent: 'center',
+                gap: '16px',
+                marginTop: '24px'
+              }}>
+                <button style={{
+                  backgroundColor: blue,
+                  color: 'white',
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  border: 'none',
+                  fontWeight: '500',
+                  cursor: 'pointer'
+                }}
+                onClick={() => window.print()}>
+                  Print Profile
+                </button>
+                
+                <button style={{
+                  backgroundColor: orange,
+                  color: 'white',
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  border: 'none',
+                  fontWeight: '500',
+                  cursor: 'pointer'
+                }}
+                onClick={() => alert('Email functionality will be linked with Outlook 365')}>
+                  Send by Email
+                </button>
               </div>
             </div>
           </div>
         ) : (
           <div style={{ 
-            backgroundColor: "white", 
-            borderRadius: "0.25rem",
-            padding: "2rem",
-            textAlign: "center"
+            backgroundColor: 'white', 
+            borderRadius: '4px',
+            padding: '32px',
+            textAlign: 'center',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
           }}>
             <div style={{ 
-              fontWeight: "600", 
-              fontSize: "1.25rem", 
-              color: colors.midnightBlue,
-              marginBottom: "0.5rem"
+              fontWeight: '600', 
+              fontSize: '20px', 
+              color: blue,
+              marginBottom: '8px'
             }}>
               No Employee Selected
             </div>
-            <p style={{ color: "gray", marginBottom: "1.5rem" }}>
+            <p style={{ color: 'gray', marginBottom: '24px' }}>
               Search for an employee by name or ID to view their profile
             </p>
           </div>
@@ -524,6 +633,6 @@ const EmployeeProfilePlatform = () => {
       </div>
     </div>
   );
-};
+}
 
-export default EmployeeProfilePlatform;
+export default EmployeeProfile;
